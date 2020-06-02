@@ -1,3 +1,4 @@
+extern crate mysqlclient_sys as ffi;
 extern crate percent_encoding;
 extern crate url;
 
@@ -15,6 +16,7 @@ pub struct ConnectionOptions {
     database: Option<CString>,
     port: Option<u16>,
     unix_socket: Option<CString>,
+    ssl_mode: Option<ffi::mysql_ssl_mode>,
 }
 
 impl ConnectionOptions {
@@ -42,6 +44,14 @@ impl ConnectionOptions {
             _ => None,
         };
 
+        let ssl_mode = match query_pairs.get("ssl_mode") {
+            Some(v) => Some(match v.as_ref() {
+                "required" => ffi::mysql_ssl_mode::SSL_MODE_REQUIRED,
+                _ => return Err(connection_url_error()),
+            }),
+            _ => None,
+        };
+
         let host = match url.host() {
             Some(Host::Ipv6(host)) => Some(CString::new(host.to_string())?),
             Some(host) if host.to_string() == "localhost" && unix_socket != None => None,
@@ -66,6 +76,7 @@ impl ConnectionOptions {
             database: database,
             port: url.port(),
             unix_socket: unix_socket,
+            ssl_mode: ssl_mode,
         })
     }
 
@@ -92,6 +103,10 @@ impl ConnectionOptions {
     pub fn unix_socket(&self) -> Option<&CStr> {
         self.unix_socket.as_ref().map(|x| &**x)
     }
+
+    pub fn ssl_mode(&self) -> Option<ffi::mysql_ssl_mode> {
+        self.ssl_mode
+    }
 }
 
 fn decode_into_cstring(s: &str) -> ConnectionResult<CString> {
@@ -103,7 +118,7 @@ fn decode_into_cstring(s: &str) -> ConnectionResult<CString> {
 
 fn connection_url_error() -> ConnectionError {
     let msg = "MySQL connection URLs must be in the form \
-               `mysql://[[user]:[password]@]host[:port][/database][?unix_socket=socket-path]`";
+               `mysql://[[user]:[password]@]host[:port][/database][?[unix_socket=socket-path]&[ssl_mode=required]`";
     ConnectionError::InvalidConnectionUrl(msg.into())
 }
 
@@ -226,4 +241,17 @@ fn unix_socket_tests() {
         CString::new(unix_socket).unwrap(),
         conn_opts.unix_socket.unwrap()
     );
+}
+
+#[test]
+fn ssl_mode_should_be_required_or_none() {
+    let conn_opts = ConnectionOptions::parse("mysql://root@localhost").unwrap();
+    assert_eq!(conn_opts.ssl_mode, None);
+    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=required").unwrap();
+    assert_eq!(
+        conn_opts.ssl_mode,
+        Some(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED)
+    );
+    let conn_res = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=invalid");
+    assert_eq!(conn_res.err(), Some(connection_url_error()))
 }

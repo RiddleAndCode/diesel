@@ -46,6 +46,19 @@ impl RawConnection {
         let database = connection_options.database();
         let port = connection_options.port();
         let unix_socket = connection_options.unix_socket();
+        let ssl_mode = connection_options.ssl_mode();
+
+        match ssl_mode {
+            Some(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED) => unsafe {
+                ffi::mysql_options(
+                    self.0.as_ptr(),
+                    ffi::mysql_option::MYSQL_OPT_SSL_MODE,
+                    &(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED as u32) as *const u32
+                        as *const libc::c_void,
+                );
+            },
+            _ => (),
+        };
 
         unsafe {
             // Make sure you don't use the fake one!
