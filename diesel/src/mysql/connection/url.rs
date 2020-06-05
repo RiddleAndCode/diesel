@@ -9,6 +9,11 @@ use std::ffi::{CStr, CString};
 
 use crate::result::{ConnectionError, ConnectionResult};
 
+#[mysqlclient_version(">=5.6.36")]
+pub type MysqlSSLMode = ffi::mysql_ssl_mode;
+#[mysqlclient_version("<5.6.36")]
+pub type MysqlSSLMode = ();
+
 pub struct ConnectionOptions {
     host: Option<CString>,
     user: CString,
@@ -16,7 +21,7 @@ pub struct ConnectionOptions {
     database: Option<CString>,
     port: Option<u16>,
     unix_socket: Option<CString>,
-    ssl_mode: Option<ffi::mysql_ssl_mode>,
+    ssl_mode: Option<MysqlSSLMode>,
     ssl_key: Option<CString>,
     ssl_cert: Option<CString>,
     ssl_ca: Option<CString>,
@@ -74,17 +79,11 @@ impl ConnectionOptions {
             _ => None,
         };
 
-        let ssl_mode = match query_pairs.get("ssl_mode") {
-            Some(v) => Some(match v.to_lowercase().as_ref() {
-                "disabled" => ffi::mysql_ssl_mode::SSL_MODE_DISABLED,
-                "preferred" => ffi::mysql_ssl_mode::SSL_MODE_PREFERRED,
-                "required" => ffi::mysql_ssl_mode::SSL_MODE_REQUIRED,
-                "verify_ca" => ffi::mysql_ssl_mode::SSL_MODE_VERIFY_CA,
-                "verify_identity" => ffi::mysql_ssl_mode::SSL_MODE_VERIFY_IDENTITY,
-                _ => return Err(connection_url_error()),
-            }),
-            _ => None,
-        };
+        let ssl_mode = parse_ssl_mode(
+            query_pairs
+                .get("ssl_mode")
+                .map(|ssl_mode| ssl_mode.as_ref()),
+        )?;
 
         let host = match url.host() {
             Some(Host::Ipv6(host)) => Some(CString::new(host.to_string())?),
@@ -178,10 +177,47 @@ fn decode_into_cstring(s: &str) -> ConnectionResult<CString> {
 fn connection_url_error() -> ConnectionError {
     let msg = "MySQL connection URLs must be in the form \
                `mysql://[[user]:[password]@]host[:port][/database][?<query_params>] \
-               where query params include `unix_socket=<unix_socket_path>`, `ssl_mode=required`, \
+               where query params include `unix_socket=<unix_socket_path>`, `ssl_mode=<ssl_mode>`, \
                `ssl_key=<ssl_key_path>`, `ssl_cert=<ssl_cert_path>`, `ssl_ca=<ssl_ca_path>`, \
                `ssl_capath=<ssl_ca_dir_path>` and `ssl_cipher=<ssl_cipher>`";
     ConnectionError::InvalidConnectionUrl(msg.into())
+}
+
+#[mysqlclient_version(">=5.7.11")]
+fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
+    Ok(match ssl_mode {
+        Some(v) => Some(match v.to_lowercase().as_ref() {
+            "disabled" => MysqlSSLMode::SSL_MODE_DISABLED,
+            "preferred" => MysqlSSLMode::SSL_MODE_PREFERRED,
+            "required" => MysqlSSLMode::SSL_MODE_REQUIRED,
+            "verify_ca" => MysqlSSLMode::SSL_MODE_VERIFY_CA,
+            "verify_identity" => MysqlSSLMode::SSL_MODE_VERIFY_IDENTITY,
+            _ => return Err(connection_url_error()),
+        }),
+        None => None,
+    })
+}
+
+#[mysqlclient_version(">=5.6.36, <5.7.11")]
+fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
+    Ok(match ssl_mode {
+        Some(v) => Some(match v.to_lowercase().as_ref() {
+            "required" => MysqlSSLMode::SSL_MODE_REQUIRED,
+            _ => return Err(connection_url_error()),
+        }),
+        None => None,
+    })
+}
+
+#[mysqlclient_version("<5.6.36")]
+fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
+    if ssl_mode.is_some() {
+        Err(ConnectionError::InvalidConnectionUrl(
+            "`ssl_mode` is not supported on mysqlclient versions under 5.6.36".into(),
+        ))
+    } else {
+        Ok(None)
+    }
 }
 
 #[test]

@@ -132,6 +132,10 @@ extern crate bitflags;
 extern crate byteorder;
 extern crate diesel_derives;
 
+#[cfg(feature = "mysql")]
+#[macro_use]
+extern crate mysqlclient_sys;
+
 #[macro_use]
 #[doc(hidden)]
 pub mod macros;

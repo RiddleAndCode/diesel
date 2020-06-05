@@ -17,7 +17,7 @@ use crate::sql_types::HasSqlType;
 #[allow(missing_debug_implementations, missing_copy_implementations)]
 /// A connection to a MySQL database. Connection URLs should be in the form
 /// `mysql://[[user]:[password]@]host[:port][/database][?<query_params>]
-/// where query params include `unix_socket=<unix_socket_path>`, `ssl_mode=required`,
+/// where query params include `unix_socket=<unix_socket_path>`, `ssl_mode=<ssl_mode>`,
 /// `ssl_key=<ssl_key_path>`, `ssl_cert=<ssl_cert_path>`, `ssl_ca=<ssl_ca_path>`,
 /// `ssl_capath=<ssl_ca_dir_path>` and `ssl_cipher=<ssl_cipher>`
 pub struct MysqlConnection {
