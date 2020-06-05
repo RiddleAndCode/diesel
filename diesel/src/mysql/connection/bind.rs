@@ -102,7 +102,7 @@ struct BindData {
 
 impl BindData {
     fn for_input(tpe: MysqlType, is_unsigned: ffi::my_bool, data: Option<Vec<u8>>) -> Self {
-        let is_null = if data.is_none() { 1 } else { 0 };
+        let is_null = data.is_none();
         let bytes = data.unwrap_or_default();
         let length = bytes.len() as libc::c_ulong;
 
@@ -126,14 +126,14 @@ impl BindData {
             tpe: tpe,
             bytes: bytes,
             length: length,
-            is_null: 0,
-            is_truncated: Some(0),
+            is_null: false,
+            is_truncated: Some(false),
             is_unsigned,
         }
     }
 
     fn is_truncated(&self) -> bool {
-        self.is_truncated.unwrap_or(0) != 0
+        self.is_truncated.unwrap_or(false)
     }
 
     fn is_fixed_size_buffer(&self) -> bool {
@@ -141,10 +141,10 @@ impl BindData {
     }
 
     fn bytes(&self) -> Option<&[u8]> {
-        if self.is_null == 0 {
-            Some(&*self.bytes)
-        } else {
+        if self.is_null {
             None
+        } else {
+            Some(&*self.bytes)
         }
     }
 

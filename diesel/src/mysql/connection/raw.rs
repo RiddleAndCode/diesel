@@ -47,20 +47,41 @@ impl RawConnection {
         let port = connection_options.port();
         let unix_socket = connection_options.unix_socket();
         let ssl_mode = connection_options.ssl_mode();
-
-        match ssl_mode {
-            Some(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED) => unsafe {
-                ffi::mysql_options(
-                    self.0.as_ptr(),
-                    ffi::mysql_option::MYSQL_OPT_SSL_MODE,
-                    &(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED as u32) as *const u32
-                        as *const libc::c_void,
-                );
-            },
-            _ => (),
-        };
+        let ssl_key = connection_options.ssl_key();
+        let ssl_cert = connection_options.ssl_cert();
+        let ssl_ca = connection_options.ssl_ca();
+        let ssl_capath = connection_options.ssl_capath();
+        let ssl_cipher = connection_options.ssl_cipher();
 
         unsafe {
+            ffi::mysql_ssl_set(
+                self.0.as_ptr(),
+                ssl_key.map(CStr::as_ptr).unwrap_or_else(|| ptr::null_mut()),
+                ssl_cert
+                    .map(CStr::as_ptr)
+                    .unwrap_or_else(|| ptr::null_mut()),
+                ssl_ca.map(CStr::as_ptr).unwrap_or_else(|| ptr::null_mut()),
+                ssl_capath
+                    .map(CStr::as_ptr)
+                    .unwrap_or_else(|| ptr::null_mut()),
+                ssl_cipher
+                    .map(CStr::as_ptr)
+                    .unwrap_or_else(|| ptr::null_mut()),
+            );
+        }
+
+        if let Some(ref ssl_mode) = ssl_mode {
+            unsafe {
+                let res = ffi::mysql_options(
+                    self.0.as_ptr(),
+                    ffi::mysql_option::MYSQL_OPT_SSL_MODE,
+                    ssl_mode as *const ffi::mysql_ssl_mode as *const libc::c_void,
+                );
+                assert_eq!(res, 0);
+            }
+        }
+
+        let conn = unsafe {
             // Make sure you don't use the fake one!
             ffi::mysql_real_connect(
                 self.0.as_ptr(),
@@ -80,12 +101,11 @@ impl RawConnection {
             )
         };
 
-        let last_error_message = self.last_error_message();
-        if last_error_message.is_empty() {
-            Ok(())
-        } else {
-            Err(ConnectionError::BadConnection(last_error_message))
+        if conn.is_null() {
+            return Err(ConnectionError::BadConnection(self.last_error_message()));
         }
+
+        Ok(())
     }
 
     pub fn last_error_message(&self) -> String {
@@ -185,7 +205,7 @@ impl RawConnection {
     }
 
     fn more_results(&self) -> bool {
-        unsafe { ffi::mysql_more_results(self.0.as_ptr()) != 0 }
+        unsafe { ffi::mysql_more_results(self.0.as_ptr()) }
     }
 
     fn next_result(&self) -> QueryResult<()> {

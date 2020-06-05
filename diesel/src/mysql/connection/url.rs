@@ -17,6 +17,11 @@ pub struct ConnectionOptions {
     port: Option<u16>,
     unix_socket: Option<CString>,
     ssl_mode: Option<ffi::mysql_ssl_mode>,
+    ssl_key: Option<CString>,
+    ssl_cert: Option<CString>,
+    ssl_ca: Option<CString>,
+    ssl_capath: Option<CString>,
+    ssl_cipher: Option<CString>,
 }
 
 impl ConnectionOptions {
@@ -44,9 +49,38 @@ impl ConnectionOptions {
             _ => None,
         };
 
+        let ssl_key = match query_pairs.get("ssl_key") {
+            Some(v) => Some(CString::new(v.as_bytes())?),
+            _ => None,
+        };
+
+        let ssl_cert = match query_pairs.get("ssl_cert") {
+            Some(v) => Some(CString::new(v.as_bytes())?),
+            _ => None,
+        };
+
+        let ssl_ca = match query_pairs.get("ssl_ca") {
+            Some(v) => Some(CString::new(v.as_bytes())?),
+            _ => None,
+        };
+
+        let ssl_capath = match query_pairs.get("ssl_capath") {
+            Some(v) => Some(CString::new(v.as_bytes())?),
+            _ => None,
+        };
+
+        let ssl_cipher = match query_pairs.get("ssl_cipher") {
+            Some(v) => Some(CString::new(v.as_bytes())?),
+            _ => None,
+        };
+
         let ssl_mode = match query_pairs.get("ssl_mode") {
-            Some(v) => Some(match v.as_ref() {
+            Some(v) => Some(match v.to_lowercase().as_ref() {
+                "disabled" => ffi::mysql_ssl_mode::SSL_MODE_DISABLED,
+                "preferred" => ffi::mysql_ssl_mode::SSL_MODE_PREFERRED,
                 "required" => ffi::mysql_ssl_mode::SSL_MODE_REQUIRED,
+                "verify_ca" => ffi::mysql_ssl_mode::SSL_MODE_VERIFY_CA,
+                "verify_identity" => ffi::mysql_ssl_mode::SSL_MODE_VERIFY_IDENTITY,
                 _ => return Err(connection_url_error()),
             }),
             _ => None,
@@ -70,13 +104,18 @@ impl ConnectionOptions {
         };
 
         Ok(ConnectionOptions {
-            host: host,
-            user: user,
-            password: password,
-            database: database,
+            host,
+            user,
+            password,
+            database,
             port: url.port(),
-            unix_socket: unix_socket,
-            ssl_mode: ssl_mode,
+            unix_socket,
+            ssl_mode,
+            ssl_key,
+            ssl_cert,
+            ssl_ca,
+            ssl_capath,
+            ssl_cipher,
         })
     }
 
@@ -107,6 +146,26 @@ impl ConnectionOptions {
     pub fn ssl_mode(&self) -> Option<ffi::mysql_ssl_mode> {
         self.ssl_mode
     }
+
+    pub fn ssl_key(&self) -> Option<&CStr> {
+        self.ssl_key.as_ref().map(|x| &**x)
+    }
+
+    pub fn ssl_cert(&self) -> Option<&CStr> {
+        self.ssl_cert.as_ref().map(|x| &**x)
+    }
+
+    pub fn ssl_ca(&self) -> Option<&CStr> {
+        self.ssl_ca.as_ref().map(|x| &**x)
+    }
+
+    pub fn ssl_capath(&self) -> Option<&CStr> {
+        self.ssl_capath.as_ref().map(|x| &**x)
+    }
+
+    pub fn ssl_cipher(&self) -> Option<&CStr> {
+        self.ssl_cipher.as_ref().map(|x| &**x)
+    }
 }
 
 fn decode_into_cstring(s: &str) -> ConnectionResult<CString> {
@@ -118,7 +177,10 @@ fn decode_into_cstring(s: &str) -> ConnectionResult<CString> {
 
 fn connection_url_error() -> ConnectionError {
     let msg = "MySQL connection URLs must be in the form \
-               `mysql://[[user]:[password]@]host[:port][/database][?[unix_socket=socket-path]&[ssl_mode=required]`";
+               `mysql://[[user]:[password]@]host[:port][/database][?<query_params>] \
+               where query params include `unix_socket=<unix_socket_path>`, `ssl_mode=required`, \
+               `ssl_key=<ssl_key_path>`, `ssl_cert=<ssl_cert_path>`, `ssl_ca=<ssl_ca_path>`, \
+               `ssl_capath=<ssl_ca_dir_path>` and `ssl_cipher=<ssl_cipher>`";
     ConnectionError::InvalidConnectionUrl(msg.into())
 }
 
@@ -247,11 +309,52 @@ fn unix_socket_tests() {
 fn ssl_mode_should_be_required_or_none() {
     let conn_opts = ConnectionOptions::parse("mysql://root@localhost").unwrap();
     assert_eq!(conn_opts.ssl_mode, None);
+    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=disabled").unwrap();
+    assert_eq!(
+        conn_opts.ssl_mode,
+        Some(ffi::mysql_ssl_mode::SSL_MODE_DISABLED)
+    );
+    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=preferred").unwrap();
+    assert_eq!(
+        conn_opts.ssl_mode,
+        Some(ffi::mysql_ssl_mode::SSL_MODE_PREFERRED)
+    );
     let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=required").unwrap();
     assert_eq!(
         conn_opts.ssl_mode,
         Some(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED)
     );
+    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=verify_ca").unwrap();
+    assert_eq!(
+        conn_opts.ssl_mode,
+        Some(ffi::mysql_ssl_mode::SSL_MODE_VERIFY_CA)
+    );
+    let conn_opts =
+        ConnectionOptions::parse("mysql://root@localhost?ssl_mode=verify_identity").unwrap();
+    assert_eq!(
+        conn_opts.ssl_mode,
+        Some(ffi::mysql_ssl_mode::SSL_MODE_VERIFY_IDENTITY)
+    );
     let conn_res = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=invalid");
     assert_eq!(conn_res.err(), Some(connection_url_error()))
+}
+
+#[test]
+fn ssl_options_should_populate() {
+    let ssl_key = "/etc/ssl/client-key.pem";
+    let ssl_cert = "/etc/ssl/client-cert.pem";
+    let ssl_ca = "/etc/ssl/ca.pem";
+    let ssl_capath = "/etc/ssl";
+    let ssl_cipher = "TLSv1.2";
+    let conn_opts = ConnectionOptions::parse(&format!(
+        "mysql://root@localhost?ssl_key={}&ssl_cert={}&ssl_ca={}&ssl_capath={}&ssl_cipher={}",
+        ssl_key, ssl_cert, ssl_ca, ssl_capath, ssl_cipher
+    ))
+    .unwrap();
+    let cstring = |s| CString::new(s).unwrap();
+    assert_eq!(cstring(ssl_key), conn_opts.ssl_key.unwrap());
+    assert_eq!(cstring(ssl_cert), conn_opts.ssl_cert.unwrap());
+    assert_eq!(cstring(ssl_ca), conn_opts.ssl_ca.unwrap());
+    assert_eq!(cstring(ssl_capath), conn_opts.ssl_capath.unwrap());
+    assert_eq!(cstring(ssl_cipher), conn_opts.ssl_cipher.unwrap());
 }
