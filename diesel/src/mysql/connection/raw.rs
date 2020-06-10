@@ -5,8 +5,9 @@ use std::os::raw as libc;
 use std::ptr::{self, NonNull};
 use std::sync::Once;
 
+use super::ssl_mode;
 use super::stmt::Statement;
-use super::url::{ConnectionOptions, MysqlSSLMode};
+use super::url::ConnectionOptions;
 use crate::result::{ConnectionError, ConnectionResult, QueryResult};
 
 pub struct RawConnection(NonNull<ffi::MYSQL>);
@@ -70,7 +71,7 @@ impl RawConnection {
             );
         }
 
-        self.set_ssl_mode(ssl_mode);
+        ssl_mode::set_ssl_mode(self.0, ssl_mode)?;
 
         let conn = unsafe {
             // Make sure you don't use the fake one!
@@ -98,23 +99,6 @@ impl RawConnection {
 
         Ok(())
     }
-
-    #[mysqlclient_version(">=5.6.36")]
-    fn set_ssl_mode(&self, ssl_mode: Option<MysqlSSLMode>) {
-        if let Some(ref ssl_mode) = ssl_mode {
-            unsafe {
-                let res = ffi::mysql_options(
-                    self.0.as_ptr(),
-                    ffi::mysql_option::MYSQL_OPT_SSL_MODE,
-                    ssl_mode as *const ffi::mysql_ssl_mode as *const libc::c_void,
-                );
-                assert_eq!(res, 0);
-            }
-        }
-    }
-
-    #[mysqlclient_version("<5.6.36")]
-    fn set_ssl_mode(&self, _: Option<MysqlSSLMode>) {}
 
     pub fn last_error_message(&self) -> String {
         unsafe { CStr::from_ptr(ffi::mysql_error(self.0.as_ptr())) }

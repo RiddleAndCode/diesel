@@ -1,18 +1,13 @@
-extern crate mysqlclient_sys as ffi;
 extern crate percent_encoding;
 extern crate url;
 
 use self::percent_encoding::percent_decode;
 use self::url::{Host, Url};
+use super::ssl_mode;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 
 use crate::result::{ConnectionError, ConnectionResult};
-
-#[mysqlclient_version(">=5.6.36")]
-pub type MysqlSSLMode = ffi::mysql_ssl_mode;
-#[mysqlclient_version("<5.6.36")]
-pub type MysqlSSLMode = ();
 
 pub struct ConnectionOptions {
     host: Option<CString>,
@@ -21,7 +16,7 @@ pub struct ConnectionOptions {
     database: Option<CString>,
     port: Option<u16>,
     unix_socket: Option<CString>,
-    ssl_mode: Option<MysqlSSLMode>,
+    ssl_mode: Option<ssl_mode::MysqlSSLMode>,
     ssl_key: Option<CString>,
     ssl_cert: Option<CString>,
     ssl_ca: Option<CString>,
@@ -79,7 +74,7 @@ impl ConnectionOptions {
             _ => None,
         };
 
-        let ssl_mode = parse_ssl_mode(
+        let ssl_mode = ssl_mode::parse_ssl_mode(
             query_pairs
                 .get("ssl_mode")
                 .map(|ssl_mode| ssl_mode.as_ref()),
@@ -142,7 +137,7 @@ impl ConnectionOptions {
         self.unix_socket.as_ref().map(|x| &**x)
     }
 
-    pub fn ssl_mode(&self) -> Option<ffi::mysql_ssl_mode> {
+    pub fn ssl_mode(&self) -> Option<ssl_mode::MysqlSSLMode> {
         self.ssl_mode
     }
 
@@ -181,43 +176,6 @@ fn connection_url_error() -> ConnectionError {
                `ssl_key=<ssl_key_path>`, `ssl_cert=<ssl_cert_path>`, `ssl_ca=<ssl_ca_path>`, \
                `ssl_capath=<ssl_ca_dir_path>` and `ssl_cipher=<ssl_cipher>`";
     ConnectionError::InvalidConnectionUrl(msg.into())
-}
-
-#[mysqlclient_version(">=5.7.11")]
-fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
-    Ok(match ssl_mode {
-        Some(v) => Some(match v.to_lowercase().as_ref() {
-            "disabled" => MysqlSSLMode::SSL_MODE_DISABLED,
-            "preferred" => MysqlSSLMode::SSL_MODE_PREFERRED,
-            "required" => MysqlSSLMode::SSL_MODE_REQUIRED,
-            "verify_ca" => MysqlSSLMode::SSL_MODE_VERIFY_CA,
-            "verify_identity" => MysqlSSLMode::SSL_MODE_VERIFY_IDENTITY,
-            _ => return Err(connection_url_error()),
-        }),
-        None => None,
-    })
-}
-
-#[mysqlclient_version(">=5.6.36, <5.7.11")]
-fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
-    Ok(match ssl_mode {
-        Some(v) => Some(match v.to_lowercase().as_ref() {
-            "required" => MysqlSSLMode::SSL_MODE_REQUIRED,
-            _ => return Err(connection_url_error()),
-        }),
-        None => None,
-    })
-}
-
-#[mysqlclient_version("<5.6.36")]
-fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
-    if ssl_mode.is_some() {
-        Err(ConnectionError::InvalidConnectionUrl(
-            "`ssl_mode` is not supported on mysqlclient versions under 5.6.36".into(),
-        ))
-    } else {
-        Ok(None)
-    }
 }
 
 #[test]
@@ -339,40 +297,6 @@ fn unix_socket_tests() {
         CString::new(unix_socket).unwrap(),
         conn_opts.unix_socket.unwrap()
     );
-}
-
-#[test]
-fn ssl_mode_should_be_required_or_none() {
-    let conn_opts = ConnectionOptions::parse("mysql://root@localhost").unwrap();
-    assert_eq!(conn_opts.ssl_mode, None);
-    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=disabled").unwrap();
-    assert_eq!(
-        conn_opts.ssl_mode,
-        Some(ffi::mysql_ssl_mode::SSL_MODE_DISABLED)
-    );
-    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=preferred").unwrap();
-    assert_eq!(
-        conn_opts.ssl_mode,
-        Some(ffi::mysql_ssl_mode::SSL_MODE_PREFERRED)
-    );
-    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=required").unwrap();
-    assert_eq!(
-        conn_opts.ssl_mode,
-        Some(ffi::mysql_ssl_mode::SSL_MODE_REQUIRED)
-    );
-    let conn_opts = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=verify_ca").unwrap();
-    assert_eq!(
-        conn_opts.ssl_mode,
-        Some(ffi::mysql_ssl_mode::SSL_MODE_VERIFY_CA)
-    );
-    let conn_opts =
-        ConnectionOptions::parse("mysql://root@localhost?ssl_mode=verify_identity").unwrap();
-    assert_eq!(
-        conn_opts.ssl_mode,
-        Some(ffi::mysql_ssl_mode::SSL_MODE_VERIFY_IDENTITY)
-    );
-    let conn_res = ConnectionOptions::parse("mysql://root@localhost?ssl_mode=invalid");
-    assert_eq!(conn_res.err(), Some(connection_url_error()))
 }
 
 #[test]

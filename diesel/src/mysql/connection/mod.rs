@@ -1,5 +1,6 @@
 mod bind;
 mod raw;
+mod ssl_mode;
 mod stmt;
 mod url;
 
