@@ -17,6 +17,7 @@ fn ssl_mode_conn_err() -> ConnectionError {
     ConnectionError::InvalidConnectionUrl(msg.into())
 }
 
+#[mysqlclient_mariadb]
 #[mysqlclient_version(">=10.0.0")]
 pub fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
     Ok(match ssl_mode {
@@ -29,6 +30,7 @@ pub fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSS
     })
 }
 
+#[mysqlclient_mariadb]
 #[mysqlclient_version(">=10.0.0")]
 pub fn set_ssl_mode(
     mysql: NonNull<ffi::MYSQL>,
@@ -61,7 +63,8 @@ pub fn set_ssl_mode(
     Ok(())
 }
 
-#[mysqlclient_version(">=5.7.11, <10.0.0")]
+#[mysqlclient_mysql]
+#[mysqlclient_version(">=5.7.11")]
 pub fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSSLMode>> {
     Ok(match ssl_mode {
         Some(v) => Some(match v.to_lowercase().as_ref() {
@@ -76,7 +79,8 @@ pub fn parse_ssl_mode(ssl_mode: Option<&str>) -> ConnectionResult<Option<MysqlSS
     })
 }
 
-#[mysqlclient_version(">=5.7.11, <10.0.0")]
+#[mysqlclient_mysql]
+#[mysqlclient_version(">=5.7.11")]
 pub fn set_ssl_mode(
     mysql: NonNull<ffi::MYSQL>,
     ssl_mode: Option<MysqlSSLMode>,
