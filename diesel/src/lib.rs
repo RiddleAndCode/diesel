@@ -15,7 +15,7 @@
 //! For Diesel to validate your queries at compile time
 //! it requires you to specify your schema in your code,
 //! which you can do with [the `table!` macro][`table!`].
-//! `diesel print-schema` or `infer_schema!` can be used
+//! `diesel print-schema` can be used
 //! to automatically generate these macro calls
 //! (by connecting to your database and querying its schema).
 //!
@@ -94,6 +94,8 @@
 //! [gitter.im/diesel-rs/diesel](https://gitter.im/diesel-rs/diesel)
 
 #![cfg_attr(feature = "unstable", feature(specialization, trait_alias))]
+// For the `specialization` feature.
+#![cfg_attr(feature = "unstable", allow(incomplete_features))]
 // Built-in Lints
 #![deny(warnings)]
 #![warn(

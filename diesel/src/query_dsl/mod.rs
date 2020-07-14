@@ -326,7 +326,7 @@ pub trait QueryDsl: Sized {
     /// aliases.
     ///
     /// You will also need to call [`allow_tables_to_appear_in_same_query!`].
-    /// If you are using `infer_schema!` or `diesel print-schema`, this will
+    /// If you are using `diesel print-schema`, this will
     /// have been generated for you.
     /// See the documentation for [`allow_tables_to_appear_in_same_query!`] for
     /// details.
@@ -943,7 +943,7 @@ pub trait QueryDsl: Sized {
     /// #
     /// # fn main() {
     /// #     let connection = establish_connection();
-    /// fn users_by_name<'a>(name: &'a str) -> users::BoxedQuery<'a, DB> {
+    /// fn users_by_name(name: &str) -> users::BoxedQuery<DB> {
     ///     users::table.filter(users::name.eq(name)).into_boxed()
     /// }
     ///
