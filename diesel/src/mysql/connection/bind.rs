@@ -159,7 +159,7 @@ impl BindData {
             bytes,
             length,
             is_null: false,
-            is_truncated: Some(0),
+            is_truncated: Some(false),
             flags,
         }
     }
@@ -389,14 +389,16 @@ impl From<(ffi::enum_field_types, Flags)> for MysqlType {
             // Those exist in libmysqlclient
             // but are just not supported
             //
-            MYSQL_TYPE_VARCHAR | MYSQL_TYPE_ENUM | MYSQL_TYPE_SET | MYSQL_TYPE_GEOMETRY => {
-                unimplemented!(
-                    "Hit a type that should be unsupported in libmysqlclient. If \
-                     you ever see this error, they probably have added support for \
-                     one of those types. Please open an issue at the diesel github \
-                     repo in this case."
-                )
-            }
+            MYSQL_TYPE_VARCHAR
+            | MYSQL_TYPE_ENUM
+            | MYSQL_TYPE_SET
+            | MYSQL_TYPE_GEOMETRY
+            | MYSQL_TYPE_TYPED_ARRAY => unimplemented!(
+                "Hit a type that should be unsupported in libmysqlclient. If \
+                 you ever see this error, they probably have added support for \
+                 one of those types. Please open an issue at the diesel github \
+                 repo in this case."
+            ),
 
             MYSQL_TYPE_NEWDATE
             | MYSQL_TYPE_TIME2
