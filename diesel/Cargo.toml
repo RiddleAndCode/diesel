@@ -35,7 +35,7 @@ r2d2 = { version = ">= 0.8, < 0.9", optional = true }
 [dependencies.mysqlclient-sys]
 optional = true
 version = "0.3.0"
-git = "https://github.com/jpopesculian/mysqlclient-sys.git"
+git = "https://github.com/RiddleAndCode/mysqlclient-sys.git"
 branch = "develop"
 
 [dependencies.diesel_derives]
